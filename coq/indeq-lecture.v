@@ -36,24 +36,18 @@ Qed.
 (* Understand why destruct doesn't work, explain depelim *)
 
 Definition cast {X} {x y: X} {p: X -> Type}
-  : x = y -> p x -> p y
-  := fun a H => match a with eq_refl => H end.
+  :  x = y -> p x -> p y
+  := fun e a => match e with eq_refl => a end.
 
 From Coq Require Import Eqdep_dec. (* UIP_refl_nat. *)
-
-Lemma K_nat {x: nat} :
-  forall (a: x = x), eq_refl = a.
-Proof.
-  intros H. symmetry. apply UIP_refl_nat.
-Qed.
-
+Check UIP_refl_nat : forall (x: nat) (e: x = x), e = eq_refl.
 (* UIP will be explained later *)
 
 Lemma lem2' {x y} :
   forall (e: y = S x) (a: lt x y), cast e a = L1 x.
 Proof.
   destruct a.
-  - destruct (K_nat e). reflexivity.
+  - rewrite (UIP_refl_nat _ e). reflexivity.
   - exfalso. apply lem1 in a. lia.
 Qed.
 
@@ -70,7 +64,7 @@ Proof.
   destruct a; intros H.
   - exfalso. congruence.
   - assert (y = y0) as <- by congruence.
-    destruct (K_nat e). cbn. exists a. reflexivity.
+    exists a. rewrite (UIP_refl_nat _ e). reflexivity.
 Qed.
 
 Lemma lem3 {x y} :
@@ -91,14 +85,18 @@ Qed.
 (* Hedberg's Theorem *)
 
 Definition UIP X := forall (x y: X) (e e': x = y), e = e'.
-Definition K X := forall (x : X) (e: x = x), eq_refl = e.
+Definition UIP' X := forall (x : X) (e: x = x), e = eq_refl.
 
-Goal forall X, UIP X <-> K X.
+Goal forall X, UIP X <-> UIP' X.
 Proof.
   intros X. split.
   - intros U x e. apply U.
-  - intros H x y e. destruct e. apply H.
+  - intros H x y e. destruct e'. apply H.
 Qed.
+
+Notation "'if' x 'is' p 'then' A 'else' B" :=
+  (match x with p => A | _ => B end)
+    (at level 200, p pattern,right associativity).
 
 Section Hedberg.
   Variable X: Type.
@@ -118,26 +116,30 @@ Section Hedberg.
     destruct e. reflexivity.
   Qed.
 
-  Variable f: forall {x y : X}, x = y -> x = y.
- 
-  Lemma f_tau_sigma {x y} (e: x = y) :
-    tau (f e) (sigma (f eq_refl)) = e.
+  Goal forall x y (e: x = y), sigma (sigma e) = e.
   Proof.
-    destruct e. apply tau_sigma.
+    intros x y []. reflexivity.
   Qed.
 
-  Lemma Hedberg' :
-    (forall x y (e e': x = y), f e = f e') -> UIP X.
+  Goal forall x y z a (e1: x = y) (e2: y = z) (e3: z = a),
+      tau e1 (tau e2 e3) = tau (tau e1 e2) e3.
   Proof.
-    intros H x y e e'.
-    rewrite <-(f_tau_sigma e), <-(f_tau_sigma e').
-    f_equal. apply H.
+    intros x y z a [] [] []. reflexivity.
+  Qed.
+
+  Variable f: forall {x y }, x = y -> x = y.
+  Variable f_eq: forall x y (e e': x = y), f e = f e'.
+
+  Lemma Hedberg' : UIP X.
+  Proof.
+    intros x y.
+    assert (f_eq1: forall e: x = y,  tau (f e) (sigma (f eq_refl)) = e).
+    { destruct e. apply tau_sigma. }
+    intros e e'.
+    rewrite <-(f_eq1 e), <-(f_eq1 e').
+    f_equal. apply f_eq.
   Qed.
 End Hedberg.
-
-Notation "'if' x 'is' p 'then' A 'else' B" :=
-  (match x with p => A | _ => B end)
-    (at level 200, p pattern,right associativity).
 
 Theorem Hedberg X :
   (forall x y: X, x = y \/ x <> y) -> UIP X.
