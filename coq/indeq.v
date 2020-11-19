@@ -26,6 +26,11 @@ Section UIP.
     exact a.
   Qed.
 
+  Goal K_Streicher -> UIP'.
+  Proof.
+    intros H x. apply (H x (fun z => z = eq_refl)). reflexivity.
+  Qed.
+
   Goal K_Streicher -> CE.
   Proof.
     intros H p x a. apply H. reflexivity.
