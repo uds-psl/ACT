@@ -43,7 +43,7 @@ Section UIP.
   Qed.
 
   Goal CD -> UIP'.
-  Proof. (* Ideas from Dominik Kirst and Gaëtan Gilbert in  Nov 20, 2020 *)
+  Proof. (* Ideas from Dominik Kirst and Gaëtan Gilbert, 20 Nov 2020 *)
     intros H x e. rewrite <-(cast_eq e). apply H.
   Qed.
 
@@ -54,7 +54,7 @@ Section UIP.
   Qed.
   
   Goal CD -> DPI.
-  Proof.  (* Idea from Gaëtan Gilbert in  Nov 20, 2020 *)
+  Proof.  (* Idea from Gaëtan Gilbert, 20 Nov 2020 *)
     intros H p x u v e. apply (DPI_eq1 H e eq_refl).
   Qed.
 
