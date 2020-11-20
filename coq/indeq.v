@@ -11,7 +11,7 @@ Section UIP.
   Definition UIP := forall (x y: X) (e e': x = y), e = e'.
   Definition UIP' := forall (x : X) (e: x = x), e = eq_refl.
   Definition K_Streicher := forall (x: X) (p: x = x -> Prop), p (eq_refl x) -> forall e, p e.
-  Definition CE := forall (p: X -> Type) (x: X) (a: p x) (e: x = x), cast e a = a.
+  Definition CD := forall (p: X -> Type) (x: X) (a: p x) (e: x = x), cast e a = a.
   Definition DPI := forall (p: X -> Type) x u v, Sig p x u = Sig p x v -> u = v.
   
   Goal UIP' -> UIP.
@@ -31,19 +31,30 @@ Section UIP.
     intros H x. apply (H x (fun z => z = eq_refl)). reflexivity.
   Qed.
 
-  Goal K_Streicher -> CE.
+  Goal K_Streicher -> CD.
   Proof.
     intros H p x a. apply H. reflexivity.
   Qed.
 
+  Lemma cast_eq {x y: X} :
+    forall e: x = y, cast (p:= eq x) e (eq_refl x) = e.
+  Proof.
+    destruct e. reflexivity.
+  Qed.
+
+  Goal CD -> UIP'.
+  Proof. (* Ideas from Dominik Kirst and Gaëtan Gilbert in  Nov 20, 2020 *)
+    intros H x e. rewrite <-(cast_eq e). apply H.
+  Qed.
+
   Lemma DPI_eq1 {p: X -> Type} {a b: sigT p} :
-    CE -> a = b -> forall e: pi1 a = pi1 b, cast e (pi2 a) = pi2 b.
+    CD -> a = b -> forall e: pi1 a = pi1 b, cast e (pi2 a) = pi2 b.
   Proof.
     intros H [] e. apply H.
   Qed.
-
-  Goal CE -> DPI.
-  Proof.
+  
+  Goal CD -> DPI.
+  Proof.  (* Idea from Gaëtan Gilbert in  Nov 20, 2020 *)
     intros H p x u v e. apply (DPI_eq1 H e eq_refl).
   Qed.
 
@@ -57,7 +68,8 @@ Section UIP.
   Proof.
     intros H x e. apply (H (fun z => z = x)), DPI_eq2.
   Qed.
-End UIP. 
+
+End UIP.
 
 Section Hedberg.
   Variable X: Type.
