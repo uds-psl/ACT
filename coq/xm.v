@@ -227,3 +227,14 @@ Section X.
        intros H9. apply H4 in H9 as [<-|H9]; auto.
   Qed.
 End X.
+
+
+Goal forall P1 P2 Q, stable Q -> ~(P1 /\ P2) -> (~P1 \/ ~P2 -> Q) -> Q.
+Proof.
+  intros *. unfold stable. tauto.
+Qed.
+
+Goal forall P1 P2 Q, stable Q -> (~P1 -> ~P2) -> ((P2 -> P1) -> Q) -> Q.
+Proof.
+  intros *. unfold stable. tauto.
+Qed.
