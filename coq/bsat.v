@@ -153,59 +153,85 @@ Equations size C : nat :=
   size (+s::C) := sizeF s + size C ;
   size (-s::C) := sizeF s + size C.
 
-Lemma lem_dnf:
-  forall D C, solved C -> Sigma Delta, DNF Delta /\ forall alpha, evac alpha (D ++ C) = evad alpha Delta.
+Lemma dnf_ind (p: clause -> clause -> Type) :
+  (forall C, solved C -> p C []) -> 
+  (forall C D x, -Var x el C -> p C (+Var x::D)) -> 
+  (forall C D x, p (+Var x::C) D -> -Var x nel C -> p C (+Var x::D)) -> 
+  (forall C D x, +Var x el C -> p C (-Var x::D)) -> 
+  (forall C D x, p (-Var x::C) D -> +Var x nel C -> p C (-Var x::D)) -> 
+  (forall C D, p C (+Fal::D)) ->
+  (forall C D, p C D -> p C (-Fal::D)) ->
+  (forall C D s t, p C (-s::D) -> p C (+t::D) -> p C (+(s ~> t) :: D)) ->
+  (forall C D s t, p C (+s::-t::D) -> p C (-(s ~> t) :: D)) ->
+  forall C D, solved C -> p C D.
 Proof.
+  intros e1 e2 e3 e6 e7 e4  e8 e5 e9.
+  intros C D. revert D C.
   refine (size_rec size _).
   intros D IH C H.
-  destruct D as [|S D]; cbn.
-  {exists [C]. cbn. split.
-   - intros D [->|[]]. exact H.
-   - intros alpha. destruct evac; reflexivity. }
+  destruct D as [|S D].
+  { apply e1, H. }
   destruct S as [[x| | s t]|[x| | s t]].
   - destruct (clause_in_dec (-Var x) C) as [H1|H1].
-    + exists []. cbn. split.
-      * intros _ [].
-      * intros alpha. rewrite evac_app.
-        specialize (evac_false (-Var x) C alpha). cbn.
-        destruct alpha, evac, evac; cbn; tauto.
-    + destruct (IH D) with (C:= +Var x::C) as (Delta&IH1&IH2).
-      * cbn. lia.
+    + apply e2; easy.
+    + apply e3. 2:exact H1. apply IH.
+      * cbn; lia.
       * constructor; easy.
-      * exists Delta. split. exact IH1.
-        intros alpha. destruct (IH2 alpha).
-        do 2 rewrite evac_app. cbn.
-        destruct alpha, evac; reflexivity.
-  - exists []. split.
+  - apply e4; easy.
+  - apply e5.
+    + apply IH. 2:exact H. cbn. lia.
+    + apply IH. 2:exact H. cbn. lia.
+  - destruct (clause_in_dec (+Var x) C) as [H1|H1].
+    + apply e6; easy.
+    + apply e7. 2:exact H1. apply IH.
+      * cbn; lia.
+      * constructor; easy.
+  - apply e8. apply IH. 2:exact H. cbn; lia.
+  - apply e9. apply IH. 2:exact H. cbn; lia.
+Qed.
+
+Lemma lem_dnf:
+  forall C D, solved C -> Sigma Delta, DNF Delta /\ forall alpha, evac alpha (D ++ C) = evad alpha Delta.
+Proof.
+  apply dnf_ind.
+  - intros C H. exists [C]. split.
+    + intros D [->|[]]. exact H.
+    + intros alpha. cbn. destruct evac; reflexivity.
+  - intros C D x H1. exists []. split.
+    + intros _ [].
+    + intros alpha. rewrite evac_app.
+      specialize (evac_false (-Var x) C alpha). cbn.
+      destruct alpha, evac, evac; cbn; tauto.
+  - intros C D x IH H.
+    destruct IH as (Delta&IH1&IH2).
+    exists Delta. split. exact IH1.
+    intros alpha. destruct (IH2 alpha).
+    do 2 rewrite evac_app. cbn.
+    destruct alpha, evac; reflexivity.
+  - intros C D x H1. exists []. split.
+    + intros _ [].
+    + intros alpha. rewrite evac_app.
+      specialize (evac_false (+Var x) C alpha). cbn.
+      destruct alpha, evac, evac; cbn; tauto.
+  - intros C D x IH H.
+    destruct IH as (Delta&IH1&IH2).
+    exists Delta. split. exact IH1.
+    intros alpha. destruct (IH2 alpha).
+    do 2 rewrite evac_app. cbn.
+    destruct alpha, evac; reflexivity.
+  -intros C D. exists []. split.
     + intros _ [].
     + reflexivity.
-  - destruct (IH (-s::D)) with (C:=C) as (Delta1&IH11&IH12).
-    { cbn; lia. } exact H.
-    destruct (IH (+t::D)) with (C:=C) as (Delta2&IH21&IH22).
-    { cbn; lia. } exact H.
+  - intros C D IH.
+    destruct IH as (Delta&IH1&IH2).
+    exists Delta. split. exact IH1.
+    intros alpha. destruct (IH2 alpha). reflexivity.
+  -  intros C D s t (Delta1&IH11&IH12) (Delta2&IH21&IH22).
     exists (Delta1++Delta2). split.
     + intros E H1%in_app_iff. intuition.
     + intros alpha. rewrite evad_app, <-IH12, <-IH22. cbn.
       destruct eva, eva, evac; reflexivity.
-  - destruct (clause_in_dec (+Var x) C) as [H1|H1].
-    + exists []. cbn. split.
-      * intros _ [].
-      * intros alpha. rewrite evac_app.
-        specialize (evac_false (+Var x) C alpha). cbn.
-        destruct alpha, evac, evac; cbn; tauto.
-    + destruct (IH D) with (C:= -Var x::C) as (Delta&IH1&IH2).
-      * cbn. lia.
-      * constructor; easy.
-      * exists Delta. split. exact IH1.
-        intros alpha. destruct (IH2 alpha).
-        do 2 rewrite evac_app. cbn.
-        destruct alpha, evac; reflexivity.
-  - destruct (IH D) with (C:=C) as (Delta&IH1&IH2).
-    { cbn. lia. } exact H.
-    exists Delta. split. exact IH1.
-    intros alpha. destruct (IH2 alpha). reflexivity.
-  - destruct (IH (+s::-t::D)) with (C:=C) as (Delta&IH1&IH2).
-    { cbn; lia. } exact H.
+  - intros C D s t (Delta&IH1&IH2).
     exists Delta. split. exact IH1.
     intros alpha. destruct (IH2 alpha). cbn.
     destruct eva, eva; reflexivity.
@@ -215,7 +241,7 @@ Theorem dnf_cla :
   forall C, Sigma Delta, DNF Delta /\ forall alpha, evac alpha C = evad alpha Delta.
 Proof.
   intros C.
-  destruct (lem_dnf C []) as (Delta&H1&H2).
+  destruct (lem_dnf [] C) as (Delta&H1&H2).
   { constructor. }
   exists Delta. split. exact H1. intros alpha. destruct (H2 alpha).
   rewrite evac_app. cbn. destruct evac; reflexivity.
@@ -377,52 +403,46 @@ Proof.
 Admitted.
 
 Lemma tab_complete:
-  forall D C, solved C -> ~ satc (D++C) -> tab (D++C).
+  forall C D, solved C -> ~ satc (D++C) -> tab (D++C).
 Proof.
-  refine (size_rec size _).
-  intros D IH C H1 H2.
-  destruct D as [|S D]; cbn.
-  { contradict H2. eexists. apply sol_solved, H1. }
-  destruct S as [[x| | s t]|[x| | s t]].
-  - destruct (clause_in_dec (-Var x) C) as [H3|H3].
-    + apply split_cla in H3 as (C1&C2&->).
+  refine (dnf_ind _ _ _ _ _ _ _ _ _ _); cbn.
+  - intros C H1 H2.
+    contradict H2. eexists. apply sol_solved, H1.
+  - intros C D x H2 H3.
+    apply split_cla in H2 as (C1&C2&->).
     rewrite app_assoc.
     apply tabM with (C:=+Var x::D++C1).
     apply tabM with (C:=[-Var x]), tabC.
-    + apply tabM'. apply IH.
-      * cbn; lia.
-      * constructor; easy.
-      * contradict H2. destruct H2 as [alpha H2]. exists alpha.
-        revert H2. rewrite !evac_app. cbn.
-        destruct alpha, evac; easy.
-  - constructor.
-  - constructor.
-    + apply (IH (-s::D)) with (C:=C).
-      { cbn; lia. } exact H1.
-      contradict H2. destruct H2 as [alpha H2]. exists alpha.
-      cbn. cbn in H2. destruct eva, eva, evac; easy.
-    + apply (IH (+t::D)) with (C:=C).
-      { cbn; lia. } exact H1.
-      contradict H2. destruct H2 as [alpha H2]. exists alpha.
-      cbn. cbn in H2. destruct eva, eva, evac; easy.
-  - destruct (clause_in_dec (+Var x) C) as [H3|H3].
-    +  apply split_cla in H3 as (C1&C2&->).
-       rewrite app_assoc.
-       apply tabM with (C:=-Var x::D++C1), tabC.
-    + apply tabM'. apply IH.
-      * cbn; lia.
-      * constructor; easy.
-      * contradict H2. destruct H2 as [alpha H2]. exists alpha.
-        revert H2. rewrite !evac_app. cbn.
-        destruct alpha, evac; easy.
-  - apply tabW.
-    apply (IH D) with (C:=C).
-    { cbn; lia. } exact H1.
-    contradict H2. destruct H2 as [alpha H2]. exists alpha. exact H2.
-  - constructor. apply (IH (+s::-t::D)) with (C:=C).
-    { cbn; lia. } exact H1.
+  - intros C D x IH H1 H2.
+    apply tabM'. apply IH.
     contradict H2. destruct H2 as [alpha H2]. exists alpha.
-      cbn. cbn in H2. destruct eva, eva; easy.
+    revert H2. cbn. rewrite !evac_app. cbn.
+    destruct alpha, evac; easy.
+  - intros C D x H2 H3.
+    apply split_cla in H2 as (C1&C2&->).
+    rewrite app_assoc.
+    apply tabM with (C:=-Var x::D++C1), tabC.
+  - intros C D x IH H1 H2.
+    apply tabM'. apply IH.
+    contradict H2. destruct H2 as [alpha H2]. exists alpha.
+    revert H2. cbn. rewrite !evac_app. cbn.
+    destruct alpha, evac; easy.
+  - intros C D H2. constructor.
+  - intros C D IH H.
+    apply tabW. apply IH.
+    contradict H. destruct H as [alpha H]. exists alpha. exact H.
+  -  intros C D s t IH1 IH2 H.
+     constructor.
+     + apply IH1.
+      contradict H. destruct H as [alpha H]. exists alpha.
+      cbn. cbn in H. destruct eva, eva, evac; easy.
+     + apply IH2.
+      contradict H. destruct H as [alpha H]. exists alpha.
+      cbn. cbn in H. destruct eva, eva, evac; easy.
+  - intros C D s t IH H.
+    constructor. apply IH.
+    contradict H. destruct H as [alpha H]. exists alpha.
+    cbn. cbn in H. destruct eva, eva; easy.
 Qed.
 
 Lemma tab_unsat C :
