@@ -1,8 +1,7 @@
-(** We verify a DNF solver for boolean formulas.
-    We also consider a tableau system for unsatisfiabilty.
- *)
-
 From Coq Require Export Bool Lia List.
+From Equations Require Export Equations.
+Set Equations Transparent.
+
 Notation "! b" := (negb b) (at level 39).
 Import ListNotations.
 Notation "x 'el' A" := (In x A) (at level 50).
@@ -14,11 +13,17 @@ Notation "'Sigma' x .. y , p" :=
   : type_scope.
 Definition iffT (X Y: Type) : Type := (X -> Y) * (Y -> X).
 Notation "X <=> Y" := (iffT X Y) (at level 95, no associativity).
-
-
-From Equations Require Export Equations.
-Set Equations Transparent.
-
+Definition dec (P: Prop) := {P} + {~P}.
+Lemma dec_transport (X Y : Prop) : 
+  (X <-> Y) -> dec X -> dec Y.
+Proof.
+  unfold dec; tauto.
+Qed.
+Lemma dec_DN X : 
+  dec X -> ~~ X -> X.
+Proof. 
+  unfold dec; tauto. 
+Qed.
 Definition size_rec {X: Type} (sigma: X -> nat) {p: X -> Type} :
   (forall x, (forall y, sigma y < sigma x -> p y) -> p x) ->
   (forall x, p x).
@@ -31,30 +36,14 @@ Proof.
   - apply F. intros y H1. apply IH. lia.
 Defined.
 
-(** A few facts about decidability *)
-
-Definition dec (P: Prop) := {P} + {~P}.
-Lemma dec_transport (X Y : Prop) : 
-  (X <-> Y) -> dec X -> dec Y.
-Proof.
-  unfold dec; tauto.
-Qed.
-Lemma dec_DN X : 
-  dec X -> ~~ X -> X.
-Proof. 
-  unfold dec; tauto. 
-Qed.
-
-(** Formulas and signed formulas are represented with  inductive types *)
+(*** Formulas and clauses *)
 
 Definition var := nat.
-Inductive form: Type :=
-  Var (x: nat) | Fal | Imp (s t : form).
+Inductive form: Type := Var (x: nat) | Fal | Imp (s t : form).
 Notation "s ~> t" := (Imp s t) (at level 41, right associativity).
-Notation "-- s" := (s ~> Fal) (at level 35, right associativity).
+Notation "-- s" := (s ~> Fal) (at level 42, right associativity).
 Implicit Types x y : var.
 Implicit Types s t : form.
-
 Inductive sform : Type := Pos (s: form) | Neg (s: form).
 Notation "+ s" := (Pos s) (at level 43).
 Notation "- s" := (Neg s). (* cannot overwrite reserved level for nat *)
@@ -67,23 +56,20 @@ Fact sform_eq_dec S T : dec (S = T).
 Proof. 
   unfold dec. repeat decide equality. 
 Defined.
-
 Fact clause_eq_dec C D : dec (C = D).
 Proof. 
   unfold dec. repeat decide equality. 
 Defined.
-
 Fact list_clause_eq_dec L L' : dec (L = L').
 Proof. 
   unfold dec. repeat decide equality. 
 Defined.
-
 Fact clause_in_dec S C : dec (S el C).
 Proof. 
   unfold dec. apply in_dec, sform_eq_dec.
 Defined.
 
-(** Evaluation of formulas and clauses *)
+(** Evaluation *)
 
 Implicit Types alpha beta : var -> bool.
 
@@ -100,10 +86,6 @@ Equations evac alpha C : bool :=
 Equations evad alpha L : bool :=
   evad alpha []     := false ;
   evad alpha (C::L) := evac alpha C || evad alpha L.
-
-(** Using the boolean infix operators !, &&, and || is essential
-   so that proof goals remain readable. *)
-
 Notation "alpha '|=' C" := (evac alpha C = true) (at level 70).
 Definition satf s := exists alpha, eva alpha s = true. 
 Definition satc C := exists alpha, alpha |= C.
@@ -114,21 +96,18 @@ Proof.
   split; intros [alpha H]; exists alpha; cbn in *;
     revert H; rewrite andb_true_r; trivial.
 Qed.
-
 Lemma evac_app alpha C D :
   evac alpha (C++D) = evac alpha C && evac alpha D.
 Proof.
   induction C as [|S C IH]; cbn. reflexivity.
   rewrite IH. apply andb_assoc.
 Qed.
-
 Lemma evad_app alpha L L' :
   evad alpha (L++L') = evad alpha L || evad alpha L'.
 Proof.
   induction L as [|C L IH]; cbn. reflexivity.
   rewrite IH. apply orb_assoc.
 Qed.
-
 Lemma evac_false S C alpha :
   S el C -> evas alpha S = false -> evac alpha C = false.
 Proof.
@@ -137,6 +116,8 @@ Proof.
   - destruct H1 as [->|H1]. now rewrite H2.
     rewrite (IH H1). apply andb_false_r.
 Qed.
+
+(*** DNF Solver *)
 
 Inductive solved : clause -> Prop :=
 | solved_nil :solved []
@@ -156,9 +137,9 @@ Equations size C : nat :=
 Lemma dnf_ind (p: clause -> clause -> Type) :
   (forall C, solved C -> p C []) -> 
   (forall C D x, -Var x el C -> p C (+Var x::D)) -> 
-  (forall C D x, p (+Var x::C) D -> -Var x nel C -> p C (+Var x::D)) -> 
+  (forall C D x, -Var x nel C -> p (+Var x::C) D -> p C (+Var x::D)) -> 
   (forall C D x, +Var x el C -> p C (-Var x::D)) -> 
-  (forall C D x, p (-Var x::C) D -> +Var x nel C -> p C (-Var x::D)) -> 
+  (forall C D x, +Var x nel C -> p (-Var x::C) D -> p C (-Var x::D)) -> 
   (forall C D, p C (+Fal::D)) ->
   (forall C D, p C D -> p C (-Fal::D)) ->
   (forall C D s t, p C (-s::D) -> p C (+t::D) -> p C (+(s ~> t) :: D)) ->
@@ -174,7 +155,7 @@ Proof.
   destruct S as [[x| | s t]|[x| | s t]].
   - destruct (clause_in_dec (-Var x) C) as [H1|H1].
     + apply e2; easy.
-    + apply e3. 2:exact H1. apply IH.
+    + apply e3. exact H1. apply IH.
       * cbn; lia.
       * constructor; easy.
   - apply e4; easy.
@@ -183,14 +164,14 @@ Proof.
     + apply IH. 2:exact H. cbn. lia.
   - destruct (clause_in_dec (+Var x) C) as [H1|H1].
     + apply e6; easy.
-    + apply e7. 2:exact H1. apply IH.
+    + apply e7. exact H1. apply IH.
       * cbn; lia.
       * constructor; easy.
   - apply e8. apply IH. 2:exact H. cbn; lia.
   - apply e9. apply IH. 2:exact H. cbn; lia.
 Qed.
 
-Lemma lem_dnf:
+Lemma dnf_cla_cla :
   forall C D, solved C -> Sigma Delta, DNF Delta /\ forall alpha, evac alpha (D ++ C) = evad alpha Delta.
 Proof.
   apply dnf_ind.
@@ -202,8 +183,7 @@ Proof.
     + intros alpha. rewrite evac_app.
       specialize (evac_false (-Var x) C alpha). cbn.
       destruct alpha, evac, evac; cbn; tauto.
-  - intros C D x IH H.
-    destruct IH as (Delta&IH1&IH2).
+  - intros C D x H (Delta&IH1&IH2).
     exists Delta. split. exact IH1.
     intros alpha. destruct (IH2 alpha).
     do 2 rewrite evac_app. cbn.
@@ -213,20 +193,18 @@ Proof.
     + intros alpha. rewrite evac_app.
       specialize (evac_false (+Var x) C alpha). cbn.
       destruct alpha, evac, evac; cbn; tauto.
-  - intros C D x IH H.
-    destruct IH as (Delta&IH1&IH2).
+  - intros C D x H (Delta&IH1&IH2).
     exists Delta. split. exact IH1.
     intros alpha. destruct (IH2 alpha).
     do 2 rewrite evac_app. cbn.
     destruct alpha, evac; reflexivity.
-  -intros C D. exists []. split.
+  - intros C D. exists []. split.
     + intros _ [].
     + reflexivity.
-  - intros C D IH.
-    destruct IH as (Delta&IH1&IH2).
+  - intros C D (Delta&IH1&IH2).
     exists Delta. split. exact IH1.
     intros alpha. destruct (IH2 alpha). reflexivity.
-  -  intros C D s t (Delta1&IH11&IH12) (Delta2&IH21&IH22).
+  - intros C D s t (Delta1&IH11&IH12) (Delta2&IH21&IH22).
     exists (Delta1++Delta2). split.
     + intros E H1%in_app_iff. intuition.
     + intros alpha. rewrite evad_app, <-IH12, <-IH22. cbn.
@@ -241,7 +219,7 @@ Theorem dnf_cla :
   forall C, Sigma Delta, DNF Delta /\ forall alpha, evac alpha C = evad alpha Delta.
 Proof.
   intros C.
-  destruct (lem_dnf [] C) as (Delta&H1&H2).
+  destruct (dnf_cla_cla [] C) as (Delta&H1&H2).
   { constructor. }
   exists Delta. split. exact H1. intros alpha. destruct (H2 alpha).
   rewrite evac_app. cbn. destruct evac; reflexivity.
@@ -256,7 +234,7 @@ Proof.
   cbn. destruct eva; reflexivity.
 Qed.
 
-(** Solved clauses are satisfiable, surprisingly tricky *)
+(*** Solved clauses are satisfiable *)
 
 Definition sol C x := if clause_in_dec (+Var x) C then true else false.
 
@@ -293,7 +271,7 @@ Proof.
     unfold sol; destruct clause_in_dec as [H3|H3]; tauto.
 Qed.
 
-(** Solvers *)
+(*** Certifying Boolean Solvers *)
 
 Corollary solve_cla :
   forall C, (Sigma alpha, alpha |= C) + ~satc C.
@@ -330,7 +308,7 @@ Proof.
   - right. exact H.
 Qed.
 
-(** Tableau predicate for signed clauses *)
+(** Tableau system *)
 
 Inductive tab : list sform -> Type :=
 | tabM S C D: tab (S::C++D) -> tab (C++S::D)
@@ -357,16 +335,16 @@ Lemma tabW C S:
   tab C -> tab (S::C).
 Proof.
   induction 1.
-  - apply (@tabM S0 (S::C)).
-    apply (@tabM S [S0]), IHtab.
-  - apply (@tabM (+Fal) [S]), tabF.
-  - apply (@tabM (-Var x) [S;+Var x]).
-    apply (@tabM (+Var x) [-Var x;S]), tabC.
-  - apply (@tabM (+(s~>t)) [S]), tabpI.
-    + apply (@tabM S [-s]), IHtab1.
-    + apply (@tabM S [+t]), IHtab2.
-  - apply (@tabM (-(s~>t)) [S]), tabnI.
-    apply (@tabM S [+s;-t]), IHtab.
+  - apply (tabM S0 (S::C)).
+    apply (tabM S [S0]), IHtab.
+  - apply (tabM (+Fal) [S]), tabF.
+  - apply (tabM (-Var x) [S;+Var x]).
+    apply (tabM (+Var x) [-Var x;S]), tabC.
+  - apply (tabM (+(s~>t)) [S]), tabpI.
+    + apply (tabM S [-s]), IHtab1.
+    + apply (tabM S [+t]), IHtab2.
+  - apply (tabM (-(s~>t)) [S]), tabnI.
+    apply (tabM S [+s;-t]), IHtab.
 Qed.
 
 Lemma tabR C D E :
@@ -374,7 +352,7 @@ Lemma tabR C D E :
 Proof.
   induction D as [|S D IH] in C |-*; cbn; intros H.
   - exact H.
-  - apply (@tabM S C).
+  - apply (tabM S C).
     apply (IH (S::C)).
     change (S::C) with ([S]++C).
     revert H. do 2 rewrite <-app_assoc. trivial.
@@ -393,14 +371,39 @@ Proof.
   apply tabL with (D:=[S]).
 Qed.
 
-
 Lemma split_cla S C :
-  S el C -> Sigma C1, Sigma C2, C = C1 ++ S::C2.
+  S el C -> Sigma C1 C2, C = C1 ++ S::C2.
 Proof.
   induction C as [|T C IH].
   - intros [].
-  -
-Admitted.
+  - intros H. destruct (clause_in_dec S C) as [H1|H1].
+    + destruct (IH H1) as (C1&C2&->). exists (T::C1), C2. reflexivity.
+    + exists [], C. destruct H as [<-|H2]; easy.
+Qed.
+
+Lemma tabC' x C :
+  +Var x el C -> -Var x el C -> tab C.
+Proof.
+  (* Rewriting lists with app_assoc can be terribly painful *)
+  intros (C1&C2&->)%split_cla.
+  destruct (clause_in_dec (-Var x) C1) as [H|H].
+  - intros _. apply split_cla in H as (C3&C4&->).
+    cbn.  rewrite <-app_assoc. cbn.
+    apply (tabM (-Var x)).
+    rewrite app_assoc.
+    apply (tabM (+Var x) (-Var x::C3 ++ C4)). cbn.
+    constructor.
+  - intros H1.
+    assert (-Var x el C2) as H2.
+    { apply in_app_or in H1 as [H1|[H1|H1]]; easy. }
+    apply split_cla in H2 as (C3&C4&->).
+    change (tab (C1 ++ (+ Var x :: C3) ++ (- Var x :: C4))).
+    rewrite app_assoc.
+    apply (tabM (-Var x)).
+    rewrite <-app_assoc.
+    apply (tabM (+Var x) (-Var x::C1)).
+    constructor.
+Qed.
 
 Lemma tab_complete:
   forall C D, solved C -> ~ satc (D++C) -> tab (D++C).
@@ -408,21 +411,18 @@ Proof.
   refine (dnf_ind _ _ _ _ _ _ _ _ _ _); cbn.
   - intros C H1 H2.
     contradict H2. eexists. apply sol_solved, H1.
-  - intros C D x H2 H3.
-    apply split_cla in H2 as (C1&C2&->).
-    rewrite app_assoc.
-    apply tabM with (C:=+Var x::D++C1).
-    apply tabM with (C:=[-Var x]), tabC.
-  - intros C D x IH H1 H2.
+  - intros C D x H2 H3. apply (tabC' x); cbn.
+    + auto.
+    + right. apply in_or_app. auto.
+  - intros C D x  H1 IH H2. 
     apply tabM'. apply IH.
     contradict H2. destruct H2 as [alpha H2]. exists alpha.
     revert H2. cbn. rewrite !evac_app. cbn.
     destruct alpha, evac; easy.
-  - intros C D x H2 H3.
-    apply split_cla in H2 as (C1&C2&->).
-    rewrite app_assoc.
-    apply tabM with (C:=-Var x::D++C1), tabC.
-  - intros C D x IH H1 H2.
+  - intros C D x H2 H3. apply (tabC' x); cbn.
+    + right. apply in_or_app. auto.
+    + auto.
+  - intros C D x H1 IH H2.
     apply tabM'. apply IH.
     contradict H2. destruct H2 as [alpha H2]. exists alpha.
     revert H2. cbn. rewrite !evac_app. cbn.
@@ -461,7 +461,7 @@ Proof.
   - right. apply tab_unsat, H.
 Qed.
 
-(** Refutation predicates *)
+(*** Abstract refutation systems *)
 
 Implicit Types (A B: list form).
 
@@ -534,7 +534,7 @@ Section Refutation.
   Qed.
 End Refutation.
 
-(** Validity *)
+(*** Validity *)
 
 Definition valid s := forall alpha, eva alpha s = true.
 
