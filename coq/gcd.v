@@ -43,11 +43,11 @@ Definition functional p :=
 Definition total p :=
   forall x y, exists z, p x y z.
 
-Definition subsumed p p' :=
+Definition sub p p' :=
   forall x y z, p x y z -> p' x y z.
 
 Definition agreep p p' :=
-  subsumed p p' /\ subsumed p' p.
+  sub p p' /\ sub p' p.
 
 Definition agreef f f' :=
   forall x y, f x y = f' x y.
@@ -58,9 +58,13 @@ Definition respects f p :=
 Definition agree f p :=
   forall x y z, p x y z <-> f x y = z.
 
-Definition rel f :=
-  fun x y z => f x y = z.
-
+Fact sub_fun_fun p p' :
+  sub p p' -> functional p' -> functional p.
+Proof.
+  intros H1 H2. hnf. intros * H3 H4.
+  eapply H2; apply H1; eassumption.
+Qed.
+  
 Fact agreep_sym p p' :
   agreep p p' -> agreep p' p.
 Proof.
@@ -74,7 +78,7 @@ Proof.
 Qed.
 
 Fact total_fun_agree p p' :
-  total p -> functional p' -> subsumed p p' -> agreep p p'.
+  total p -> functional p' -> sub p p' -> agreep p p'.
 Proof.
   intros H1 H2 H3. split. exact H3.
   intros x y z H4.
@@ -91,25 +95,6 @@ Proof.
   - intros <-. apply H2.    
 Qed.
 
-Fact rel_agree f :
-  agree f (rel f).
-Proof.
-  apply fun_respects_agree; cbv; congruence.
-Qed.
-
-Fact rel_fun f :
-  functional (rel f).
-Proof.
-  cbv. congruence.
-Qed.
-
-Fact rel_agreef f f' :
-  subsumed (rel f) (rel f') <-> agreef f f'.
-Proof.
-  split.
-  - intros H x y. symmetry. apply H. reflexivity.
-  - intros H x y. unfold rel. intros z <-. symmetry.  apply H.
-Qed.
 
 (*** GCD predicates *)
     
@@ -118,7 +103,7 @@ Definition gcd_pred p : Prop :=
   (forall x y z, p x y z -> p y x z) /\
   (forall x y z, x <= y ->  p x (y - x) z -> p x y z).
 
-Definition gcd_rec_sym (p: nat -> nat -> Type) :
+Definition gcd_rec (p: nat -> nat -> Type) :
   (forall y, p 0 y) ->
   (forall x y, p y x -> p x y) ->
   (forall x y, x <= y -> p x (y - x) -> p x y) ->
@@ -140,7 +125,7 @@ Fact gcd_pred_total p :
   gcd_pred p -> forall x y, Sigma z, p x y z.
 Proof.
   intros (H11&H12&H13).
-  apply gcd_rec_sym.
+  apply gcd_rec.
   - intros y. exists y. apply H11.
   - intros x y [z IH]. exists z. apply H12, IH.
   - intros x y H [z IH]. exists z. apply H13. exact H. exact IH.
@@ -157,22 +142,14 @@ Proof.
   repeat split. exact G1. exact G2. exact G3.
 Qed.
 
-Fact G_subsumed p  :
-  gcd_pred p -> subsumed G p.
+Fact G_sub p  :
+  gcd_pred p -> sub G p.
 Proof.
   intros (H1&H2&H3). hnf.
   induction 1 as [y|x y z _ IH|x y z H _ IH].
   - apply H1.
   - apply H2, IH.
   - apply H3; easy.
-Qed.
-
-Fact gcd_pred_fun :
-  Sigma f, forall p, gcd_pred p -> respects f p.
-Proof.
-  exists (fun x y => pi1 (gcd_pred_total G G_gcd_pred x y)).
-  intros p H x y. destruct gcd_pred_total as [z H1]. cbn.
-  apply G_subsumed; easy.
 Qed.
 
 Fact fun_gcd_pred_agree_G p :
@@ -185,18 +162,23 @@ Proof.
     + exact G_gcd_pred.
     + exists z. exact H3.
   - exact H2.
-  - apply G_subsumed, H1.
+  - apply G_sub, H1.
 Qed.
 
-Fact fun_gcd_pred_agree p p' :
-  gcd_pred p -> functional p ->
-  gcd_pred p' -> functional p' ->
-  agreep p p'.
+Fact gcd_pred_fun :
+  Sigma f, forall p, gcd_pred p -> respects f p.
 Proof.
-  intros H1 H2 H1' H2'.
-  apply agreep_trans with (p2:=G).
-  - apply fun_gcd_pred_agree_G; assumption.
-  - apply agreep_sym, fun_gcd_pred_agree_G; assumption.
+  exists (fun x y => pi1 (gcd_pred_total G G_gcd_pred x y)).
+  intros p H x y. destruct gcd_pred_total as [z H1]. cbn.
+  apply G_sub; easy.
+Qed.
+
+Fact gcd_pred_fun_agree :
+  Sigma f, forall p, gcd_pred p -> functional p -> agree f p.
+Proof.
+  destruct gcd_pred_fun as [f H0]. exists f.
+  intros p H1 H2. apply fun_respects_agree. exact H2.
+  apply H0, H1.
 Qed.
 
 (*** Arithmetic GCD Predicate *)
@@ -210,7 +192,7 @@ Definition gamma x y z : Prop :=
 Fact divides_zero n :
   divides n 0.
 Proof.
-  exists 0. reflexivity.
+  exists 0. refl.
 Qed.
 
 Fact divides_minus x y n :
@@ -251,7 +233,7 @@ Fact divides_eq x y :
   (forall n, divides n x <-> divides n y) -> x = y.
 Proof.
   destruct x, y; intros H.
-  - reflexivity.
+  - refl.
   - exfalso.
     enough (S(S y) <= S y) by lia.
     apply divides_bnd. lia.
@@ -318,13 +300,20 @@ Proof.
     + intros H1. apply G'3. lia. exact H1.
 Qed.
 
-Fact G'_gcd_predicate :
+Fact G'_gcd_pred :
   gcd_pred G'.
 Proof.
   repeat split.
   - exact G'1.
   - exact G'_comm.
   - exact G'_sub.
+Qed.
+
+Fact G_fun :
+  functional G.
+Proof.
+  eapply sub_fun_fun. 2:apply G'_fun.
+  apply G_sub, G'_gcd_pred.
 Qed.
 
 (*** GCD Functions *)
@@ -338,57 +327,41 @@ Fact gcd_fun_respects f p :
   gcd_fun f -> gcd_pred p -> respects f p.
 Proof.
   intros (H11&H12&H13) (H21&H22&H23).
-  hnf. apply gcd_rec_sym.
+  hnf. apply gcd_rec.
   - intros y. rewrite H11. apply H21.
   - intros x y. rewrite H12. apply H22.
   - intros x y H IH. rewrite H13. 2:exact H. apply H23. exact H. exact IH.
 Qed.
 
-Fact agree_gcd_fun_rel f p :
-  agree f p -> gcd_pred p <-> gcd_fun f.
+Fact gcd_fun_if f p :
+  functional p -> gcd_pred p -> respects f p -> gcd_fun f.
 Proof.
-  intros H1. split.
-  - intros (H21&H22&H23). repeat split.
-    + intros y. apply H1. apply H21.
-    + intros x y. apply H1. apply H22, H1. reflexivity.
-    + intros x y H. apply H1. apply H23. lia. apply H1. reflexivity.
-  - intros (H21&H22&H23). repeat split.
-    + intros y. apply H1. apply H21.
-    + intros x y z. intros <-%H1. apply H1. apply H22.
-    + intros x y z H. intros <-%H1. rewrite <- H23. 2:lia.
-      apply H1. reflexivity.
+  intros H1 (H21&H22&H23) H3. repeat split.
+  - intros y. eapply H1. apply H3. apply H21.
+  - intros x y. eapply H1. apply H3. apply H22. apply H3.
+  - intros x y H. eapply H1. apply H3. apply H23. exact H. apply H3.
 Qed.
 
-Corollary respect_fun_gcd_pred f p :
-  respects f p -> functional p -> gcd_pred p -> gcd_fun f.
+Fact gcd_fun_ex :
+  Sigma f, gcd_fun f.
 Proof.
-  intros H1 H2. apply agree_gcd_fun_rel.
-  apply fun_respects_agree; easy.
+  destruct gcd_pred_fun as [f H]. exists f.
+  eapply gcd_fun_if.
+  - apply G'_fun.
+  - apply G'_gcd_pred.
+  - apply H, G'_gcd_pred.
 Qed.
 
-Corollary gcd_fun_rel f :
-  gcd_fun f <-> gcd_pred (rel f).
-Proof.
-  symmetry.
-  apply agree_gcd_fun_rel.
-  apply rel_agree.
-Qed.
-
-Corollary gcd_fun_agreef f f' :
+Fact gcd_fun_agreef f f' :
   gcd_fun f -> gcd_fun f' -> agreef f f'.
 Proof.
-  intros H1%gcd_fun_rel H2%gcd_fun_rel.
-  apply rel_agreef.
-  apply fun_gcd_pred_agree; (assumption || apply rel_fun).
+  intros (H11&H12&H13) (H21&H22&H23).
+  hnf. apply gcd_rec.
+  - intros y. rewrite H11, H21. refl.
+  - intros x y H. rewrite H12, H22. exact H.
+  - intros x y H H1. rewrite H13, H23; assumption.
 Qed.
 
-Corollary gcd_fun_rel_agree f p :
-  gcd_fun f -> gcd_pred p -> functional p -> agree f p.
-Proof.
-  intros H1 H2 H3.
-  apply fun_respects_agree. exact H3.
-  apply gcd_fun_respects; assumption.
-Qed.
 
 (*** Procedural Specification *)
 
@@ -408,7 +381,7 @@ Goal forall f, Gamma_sat f <->
                                   else f (x - y) (S y)).
 Proof.
   intros f. split.
-  - intros F. repeat split; intros; rewrite F; reflexivity.
+  - intros F. repeat split; intros; rewrite F; refl.
   - intros E x y.
     destruct x. easy.
     destruct y; cbn; easy.
@@ -420,8 +393,8 @@ Proof.
   intros F G.
   refine (size_rec2 (fun x y => x + y) _).
   intros x y IH. rewrite F, G.
-  destruct x as [|x]. reflexivity.
-  destruct y as [|y]. reflexivity.
+  destruct x as [|x]. refl.
+  destruct y as [|y]. refl.
   cbn. destruct le_lt_dec as [H|H]; apply IH; lia.
 Qed.
 
@@ -431,10 +404,10 @@ Proof.
   intros F.  
   refine (size_rec2 (fun x y => x + y) _).
   intros x y IH. rewrite !F.
-  destruct x,y; cbn. 1-3:reflexivity.
+  destruct x,y; cbn. 1-3:refl.
   destruct le_lt_dec as [H|H];
     destruct le_lt_dec as [H'|H'].
-  - assert (x = y) as <- by lia. reflexivity.
+  - assert (x = y) as <- by lia. refl.
   - apply IH; lia.
   - apply IH; lia.
   - exfalso; lia.
@@ -464,8 +437,8 @@ Proof.
   intros x y IH n n' H1 H2.
   destruct n. lia.
   destruct n'. lia.
-  destruct x. reflexivity. 
-  destruct y. reflexivity.
+  destruct x. refl. 
+  destruct y. refl.
   cbn [g].
   destruct le_lt_dec; apply IH; lia.
 Qed.
@@ -483,8 +456,8 @@ Qed.
 Fact Gamma_sat_gcd :
   Gamma_sat gcd.
 Proof.
-  intros [|x] y. reflexivity.
-  destruct y as [|y]. reflexivity.
+  intros [|x] y. refl.
+  destruct y as [|y]. refl.
   cbn [Gamma]. apply gcd3.
 Qed.
 
@@ -499,7 +472,7 @@ Proof.
       destruct x.
       { cbn. lia. }
       destruct y.
-      { reflexivity. }
+      { refl. }
       unfold Gamma at 1.
       destruct le_lt_dec as [H2|H2].
       2:{ exfalso. lia. }
@@ -510,7 +483,7 @@ Proof.
     destruct y; cbn.
     { rewrite E2. apply E1. }
     destruct le_lt_dec as [H1|H1].
-    + rewrite E3 by lia. reflexivity.
+    + rewrite E3 by lia. refl.
     + rewrite E2. rewrite E3 by lia. apply E2.
 Qed.
 
@@ -519,18 +492,6 @@ Fact gcd_gcd_fun :
 Proof.
   apply Gamma_gcd_fun, Gamma_sat_gcd.
 Qed.
-
-Fact G_fun :
-  functional G.
-Proof.
-  assert (H: agreep (rel gcd) G).
-  { apply fun_gcd_pred_agree_G.
-    - apply gcd_fun_rel, gcd_gcd_fun.
-    - apply rel_fun. }
-  intros x y z z' H1%H H2%H. revert H1 H2.
-  unfold rel. congruence.
-Qed.
-
 
 
 
