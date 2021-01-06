@@ -387,17 +387,6 @@ Proof.
     destruct y; cbn; easy.
 Qed.
 
-Fact Gamma_unique f g :
-  Gamma_sat f -> Gamma_sat g -> agreef f g.
-Proof.
-  intros F G.
-  refine (size_rec2 (fun x y => x + y) _).
-  intros x y IH. rewrite F, G.
-  destruct x as [|x]. refl.
-  destruct y as [|y]. refl.
-  cbn. destruct le_lt_dec as [H|H]; apply IH; lia.
-Qed.
-
 Fact Gamma_com f :
   Gamma_sat f -> forall x y, f x y = f y x.
 Proof.
@@ -411,6 +400,43 @@ Proof.
   - apply IH; lia.
   - apply IH; lia.
   - exfalso; lia.
+Qed.
+
+Fact Gamma_gcd_fun f :
+  Gamma_sat f <-> gcd_fun f.
+Proof.
+  split.
+  - intros H. repeat split.
+    + apply H.
+    + apply Gamma_com, H.
+    + intros x y H1. rewrite !H.
+      destruct x.
+      { cbn. lia. }
+      destruct y.
+      { refl. }
+      unfold Gamma at 1.
+      destruct le_lt_dec as [H2|H2].
+      2:{ exfalso. lia. }
+      apply H.
+  - intros (E1&E2&E3) x y.
+    destruct x.
+    { apply E1. }
+    destruct y; cbn.
+    { rewrite E2. apply E1. }
+    destruct le_lt_dec as [H1|H1].
+    + rewrite E3 by lia. refl.
+    + rewrite E2. rewrite E3 by lia. apply E2.
+Qed.
+
+Fact Gamma_unique f g :
+  Gamma_sat f -> Gamma_sat g -> agreef f g.
+Proof.
+  intros F G.
+  refine (size_rec2 (fun x y => x + y) _).
+  intros x y IH. rewrite F, G.
+  destruct x as [|x]. refl.
+  destruct y as [|y]. refl.
+  cbn. destruct le_lt_dec as [H|H]; apply IH; lia.
 Qed.
 
 (** Step-indexed Construction *)
@@ -459,32 +485,6 @@ Proof.
   intros [|x] y. refl.
   destruct y as [|y]. refl.
   cbn [Gamma]. apply gcd3.
-Qed.
-
-Fact Gamma_gcd_fun f :
-  Gamma_sat f <-> gcd_fun f.
-Proof.
-  split.
-  - intros H. repeat split.
-    + apply H.
-    + apply Gamma_com, H.
-    + intros x y H1. rewrite !H.
-      destruct x.
-      { cbn. lia. }
-      destruct y.
-      { refl. }
-      unfold Gamma at 1.
-      destruct le_lt_dec as [H2|H2].
-      2:{ exfalso. lia. }
-      apply H.
-  - intros (E1&E2&E3) x y.
-    destruct x.
-    { apply E1. }
-    destruct y; cbn.
-    { rewrite E2. apply E1. }
-    destruct le_lt_dec as [H1|H1].
-    + rewrite E3 by lia. refl.
-    + rewrite E2. rewrite E3 by lia. apply E2.
 Qed.
 
 Fact gcd_gcd_fun :
