@@ -41,9 +41,10 @@ Fact Mod_le x y :
   Mod x y <= y.
 Proof.
   funelim (Mod x y).
+  destruct Heqcall.
   destruct le_lt_dec as [H1|H1].
-  - destruct Heqcall. exact H1.
-  - destruct Heqcall. auto.
+  - exact H1.
+  - auto.
 Qed.
 
 Equations? GCD (x y: nat) : nat by wf y lt :=
