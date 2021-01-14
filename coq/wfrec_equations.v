@@ -11,6 +11,11 @@ Qed.
 
 Compute gcd 33 121.
 
+Check gcd_equation_1.
+Check gcd_equation_2.
+Check gcd_equation_3.
+Print Assumptions gcd_equation_1.
+
 Fact gcd_eq x y :
   gcd x y = match x, y with
             | 0, y => y
@@ -31,17 +36,12 @@ Proof.
   lia.
 Qed.
 
-Fact Mod_eq x y :
-  Mod x y = if le_lt_dec x y then x else Mod (x - S y) y.
-Proof.
-  apply Mod_equation_1.
-Qed.
+Check Mod_equation_1.
 
 Fact Mod_le x y :
   Mod x y <= y.
 Proof.
-  funelim (Mod x y).
-  destruct Heqcall.
+  funelim (Mod x y). destruct Heqcall.
   destruct le_lt_dec as [H1|H1].
   - exact H1.
   - auto.
@@ -56,13 +56,16 @@ Qed.
 
 Compute GCD 60 24.
 
-Fact GCD_eq x y :
-  GCD x y = match y with
-            | 0 => x
-            | S y => GCD (S y) (Mod x y)
-            end.
-Proof.
-  destruct y.
-  - apply GCD_equation_1.
-  - apply GCD_equation_2.
-Qed.
+Check GCD_equation_1.
+Check GCD_equation_2.
+
+Equations fib (n: nat) : nat by wf n lt :=
+  fib 0         := 0 ;
+  fib 1         := 1 ;
+  fib (S (S n)) := fib n + fib (S n).
+
+Compute fib 10.
+Check fib_equation_1.
+Check fib_equation_2.
+Check fib_equation_3.
+
