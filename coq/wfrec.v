@@ -31,7 +31,7 @@ Proof.
   induction n as [|n IH].
   - easy.
   - intros x H. constructor. intros y H1. apply IH. lia.
-Qed.
+Defined.
 
 Section Lexical_product.
   Variables (X: Type) (R: X -> X -> Prop).
@@ -126,23 +126,20 @@ Section Unfolding_equation.
 End Unfolding_equation.
 Arguments W_eq {X R R_wf p F}.
 
-Section Div.
-  Variable y: nat.
-  Implicit Types (x: nat) (g: nat -> nat).
-  (* Unguarded step function *)
-  Definition G g x : nat :=
-    if le_lt_dec x y then 0 else S (g (x - S y)).
-  (* Guarded step function *)
-  Definition F x (h: forall x', x' < x -> nat) : nat.
-    refine (if le_lt_dec x y then 0 else S (h (x - S y) _)).
-    abstract lia. 
-  Defined.
-  Definition g: nat -> nat := W lt_wf F.
+(** Euclidean division with W *)
 
-  Fact g_eq :
-    forall x, g x = if le_lt_dec x y then 0 else S (g (x - S y)).
-  Proof.
-    exact W_eq.
-  Qed.
-End Div.
+(* Guarded step function, y pulled out as parameter *)
+Definition Div (y x : nat) (h: forall x', x' < x -> nat) : nat.
+Proof.
+  refine (if le_lt_dec x y then 0 else S (h (x - S y) _)).
+  abstract lia. 
+Defined.
+
+Definition div x y := W lt_wf (Div y) x.
+Compute div 16 3.
+Fact div_eq x y :
+  div x y = if le_lt_dec x y then 0 else S (div (x - S y) y).
+Proof.
+  exact (W_eq x).
+Qed.
 
