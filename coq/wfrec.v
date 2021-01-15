@@ -47,7 +47,7 @@ Section Lexical_product.
     constructor. intros [x' y']. unfold lex at 1. cbn. intros [H|[-> H]].
     - apply IH1, H.
     - apply IH2, H.
-  Qed.
+  Defined.
 End Lexical_product.
 
 Section Retract.
@@ -60,14 +60,15 @@ Section Retract.
     refine (W' _). intros y IH x ->.
     constructor. unfold retract at 1. intros y H.
     eapply IH. exact H. reflexivity.
-  Qed.
+  Defined.
         
   Fact retract_wf :
     wf R -> wf retract.
   Proof.
     intros H x. apply retract_Acc, H.
-  Qed.
+  Defined.
 End Retract.
+Arguments retract_wf {X Y R}.
 
 Section Transitive_closure.
   Variables (X: Type) (R: X -> X -> Prop).
@@ -135,11 +136,50 @@ Proof.
   abstract lia. 
 Defined.
 
-Definition div x y := W lt_wf (Div y) x.
+Definition div x y : nat := W lt_wf (Div y) x.
 Compute div 16 3.
 Fact div_eq x y :
   div x y = if le_lt_dec x y then 0 else S (div (x - S y) y).
 Proof.
   exact (W_eq x).
 Qed.
+
+(** GCDs with W *)
+(* Note: Pairing introduces considerable bureaucratic pain *)
+
+Implicit Types (x y: nat) (a b: nat * nat).
+Definition sigma a := fst a + snd a.
+
+Definition GCD a : (forall b, sigma b < sigma a -> nat) -> nat.
+Proof.
+  (* must match on a and take h late because of dependency *)
+  refine (match a with
+          | (0, y) => fun _ => y
+          | (S x, 0) => fun _ => S x
+          | (S x, S y) => fun h => match (le_lt_dec x y) with
+                               | left H => h (S x, y - x) _
+                               | right H => h (x - y, S y) _
+                               end
+          end).
+  all: cbn; abstract lia.
+Defined.
+
+Definition gcd x y : nat := W (retract_wf sigma lt_wf) GCD (x,y).
+
+Compute gcd 49 63.
+          
+Fact gcd_eq x y :
+  gcd x y = match x, y with
+            | 0, y => y
+            | S x, 0 => S x
+            | S x, S y => if le_lt_dec x y
+                         then gcd (S x) (y - x)
+                         else gcd (x - y) (S y)
+            end.
+Proof.
+  unfold gcd. rewrite W_eq.
+  destruct x. reflexivity.
+  destruct y; reflexivity.
+Qed.
+
 
