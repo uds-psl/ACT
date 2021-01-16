@@ -49,6 +49,8 @@ Section Lexical_product.
     - apply IH2, H.
   Defined.
 End Lexical_product.
+Arguments lex {X} R {Y}.
+Arguments lex_wf {X R Y S}.
 
 Section Retract.
   Variables (X Y: Type) (R: Y -> Y -> Prop) (sigma: X -> Y).
@@ -133,7 +135,7 @@ Arguments W_eq {X R R_wf p F}.
 Definition Div (y x : nat) (h: forall x', x' < x -> nat) : nat.
 Proof.
   refine (if le_lt_dec x y then 0 else S (h (x - S y) _)).
-  abstract lia. 
+  lia. 
 Defined.
 
 Definition div x y : nat := W lt_wf (Div y) x.
@@ -144,6 +146,8 @@ Proof.
   exact (W_eq x).
 Qed.
 
+Print Assumptions div_eq.
+
 (** GCDs with W *)
 (* Note: Pairing introduces considerable bureaucratic pain *)
 
@@ -152,7 +156,7 @@ Definition sigma a := fst a + snd a.
 
 Definition GCD a : (forall b, sigma b < sigma a -> nat) -> nat.
 Proof.
-  (* must match on a and take h late because of dependency *)
+  (* must take h late because of dependency on a *)
   refine (match a with
           | (0, y) => fun _ => y
           | (S x, 0) => fun _ => S x
@@ -161,13 +165,13 @@ Proof.
                                | right H => h (x - y, S y) _
                                end
           end).
-  all: cbn; abstract lia.
+  all: cbn; lia.
 Defined.
 
 Definition gcd x y : nat := W (retract_wf sigma lt_wf) GCD (x,y).
 
 Compute gcd 49 63.
-          
+      
 Fact gcd_eq x y :
   gcd x y = match x, y with
             | 0, y => y
@@ -181,5 +185,48 @@ Proof.
   destruct x. reflexivity.
   destruct y; reflexivity.
 Qed.
+
+Fact gcd_eq3 x y :
+  gcd (S x) (S y) = if le_lt_dec x y
+                    then gcd (S x) (y - x)
+                    else gcd (x - y) (S y).
+Proof.
+  refine (W_eq _).
+Qed.
+
+(** Ackermann with W *)
+
+Definition ACK a : (forall b, lex lt lt b a -> nat) -> nat.
+Proof.
+  (* must take h late because of dependency on a *)
+  refine (match a with
+          | (0, y) => fun _ => S y
+          | (S x, 0) => fun h => h (x, 1) _
+          | (S x, S y) => fun h => h (x, h (S x, y) _) _
+          end).
+  Unshelve.
+  all:unfold lex; cbn; auto.
+  (* Using lia here will block computation *)
+Defined.
+
+Definition ack x y : nat := W (lex_wf lt_wf lt_wf) ACK (x,y).
+
+Compute ack 3 3. 
+ 
+Fact ack_eq x y :
+  ack x y = match x, y with
+            | 0, y => S y
+            | S x, 0 => ack x 1
+            | S x, S y => ack x (ack (S x) y)
+            end.
+Proof.
+  unfold ack. rewrite W_eq.
+  destruct x. reflexivity.
+  destruct y; reflexivity.
+Qed.
+
+
+
+
 
 
