@@ -55,19 +55,22 @@ Arguments lex_wf {X R Y S}.
 Section Retract.
   Variables (X Y: Type) (R: Y -> Y -> Prop) (sigma: X -> Y).
   Definition retract (x x': X) := R (sigma x) (sigma x').
-  Lemma retract_Acc :
-    forall x, Acc R (sigma x) -> Acc retract x.
-  Proof.
-    enough (forall y, Acc R y -> forall x, y = sigma x -> Acc retract x) by eauto.
-    refine (W' _). intros y IH x ->.
-    constructor. unfold retract at 1. intros y H.
-    eapply IH. exact H. reflexivity.
-  Defined.
-        
   Fact retract_wf :
     wf R -> wf retract.
   Proof.
-    intros H x. apply retract_Acc, H.
+    intros H.
+    enough (forall y x,  sigma x = y -> Acc retract x) by (hnf;eauto).
+    refine (W H _). intros y IH x H1.
+    constructor. intros x' H2.
+    apply (IH (sigma x')). 2:reflexivity.
+    destruct H1. exact H2.
+  Defined.
+  Definition size_rec :
+    wf(R) -> forall p: X -> Type,
+      (forall x, (forall x', R (sigma x') (sigma x) -> p x') -> p x) ->
+      forall x, p x.
+  Proof.
+    intros R_wf p. apply (W (retract_wf R_wf)).
   Defined.
 End Retract.
 Arguments retract_wf {X Y R}.
@@ -115,19 +118,17 @@ Qed.
 
 Print Assumptions Acc_pure.
 
-Section Unfolding_equation.
-  Variables (X: Type) (R: X -> X -> Prop) (R_wf: wf R).
-  Variable p: X -> Type.
-  Variables F: forall x, (forall y, R y x -> p y) -> p x.
-  Fact W_eq x :
-    W R_wf F x = F x (fun y _ => W R_wf F y).
-  Proof.
-    unfold W. destruct (R_wf x) as [h]. cbn.
-    f_equal. extensionality y. extensionality r.
-    f_equal. apply Acc_pure.
-  Qed.
-End Unfolding_equation.
-Arguments W_eq {X R R_wf p F}.
+Fact W_eq
+     {X} {R: X -> X -> Prop} {R_wf: wf R}
+     {p: X -> Type}
+     {F: forall x, (forall y, R y x -> p y) -> p x}
+     (x: X)
+  : W R_wf F x = F x (fun y _ => W R_wf F y).
+Proof.
+  unfold W. destruct (R_wf x) as [h]. cbn.
+  f_equal. extensionality y. extensionality r.
+  f_equal. apply Acc_pure.
+Qed.
 
 (** Euclidean division with W *)
 
@@ -171,7 +172,15 @@ Defined.
 Definition gcd x y : nat := W (retract_wf sigma lt_wf) GCD (x,y).
 
 Compute gcd 49 63.
-      
+     
+Fact gcd_eq3 x y :
+  gcd (S x) (S y) = if le_lt_dec x y
+                    then gcd (S x) (y - x)
+                    else gcd (x - y) (S y).
+Proof.
+  refine (W_eq _).
+Qed.
+ 
 Fact gcd_eq x y :
   gcd x y = match x, y with
             | 0, y => y
@@ -184,14 +193,6 @@ Proof.
   unfold gcd. rewrite W_eq.
   destruct x. reflexivity.
   destruct y; reflexivity.
-Qed.
-
-Fact gcd_eq3 x y :
-  gcd (S x) (S y) = if le_lt_dec x y
-                    then gcd (S x) (y - x)
-                    else gcd (x - y) (S y).
-Proof.
-  refine (W_eq _).
 Qed.
 
 (** Ackermann with W *)
