@@ -1,4 +1,5 @@
 From Coq Require Import Arith Lia.
+Unset Elimination Schemes. 
 
 Section Acc.
   Variables (X: Type) (R: X -> X -> Prop).
@@ -22,6 +23,15 @@ Arguments Acc {X}.
 Arguments W' {X R p}.
 Arguments wf {X}.
 Definition W {X R p} H F x := @W' X R p F x (H x).
+
+Fact Acc_ext {X} {R R': X -> X -> Prop} :
+  (forall x y, R' x y -> R x y) -> forall x, Acc R x -> Acc R' x.
+Proof.
+  intros H.
+  apply W'. intros x IH.
+  constructor. intros y H1%H.
+  apply IH, H1.
+Qed.
 
 Fact lt_wf :
   wf lt.
@@ -90,7 +100,26 @@ Section Transitive_closure.
     - apply IH, H1.
     - apply IH in H2. destruct H2 as [H2].
       apply H2, H1.
-  Qed.                               
+  Qed.
+  Fact TC_ind x (p: X -> Prop) :
+    (forall y, R x y -> p y) ->
+    (forall y' y, p y' -> R y' y -> p y) ->
+    forall y, TC x y -> p y.
+  Proof.
+    intros e1 e2.
+    refine (fix f y a := match a with
+                         | TC1 _ _ r => e1 y r
+                         | TC2 _ _ y' a r => e2 y' y _ r
+                         end).
+    refine (f y' a).
+  Qed.
+  Fact TC_trans x y z :
+    TC x y -> TC y z -> TC x z.
+  Proof.
+    intros H. revert z. apply TC_ind.
+    - intros z. apply TC2, H.
+    - intros y' z. apply TC2.
+  Qed.
 End Transitive_closure.
 
 Section Successor_relation.
