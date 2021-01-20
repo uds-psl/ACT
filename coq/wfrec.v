@@ -85,11 +85,234 @@ Section Retract.
 End Retract.
 Arguments retract_wf {X Y R}.
 
+From Coq Require Import Classical_Prop FunctionalExtensionality.
+
+Fact Acc_pure X (R: X -> X -> Prop) :
+  forall x (a a': Acc R x), a = a'.
+Proof.
+  enough (forall x (a: Acc R x) (a a': Acc R x), a = a') by eauto.
+  refine (W' _). intros x IH [h] [h']. f_equal.
+  extensionality y. extensionality r. apply IH, r.
+Qed.
+
+Print Assumptions Acc_pure.
+
+Fact W_eq
+     {X} {R: X -> X -> Prop} {R_wf: wf R}
+     {p: X -> Type}
+     {F: forall x, (forall y, R y x -> p y) -> p x}
+     (x: X)
+  : W R_wf F x = F x (fun y _ => W R_wf F y).
+Proof.
+  unfold W. destruct (R_wf x) as [h]. cbn.
+  f_equal. extensionality y. extensionality r.
+  f_equal. apply Acc_pure.
+Qed.
+
+Fact W_unique 
+     {X} {R: X -> X -> Prop} {R_wf: wf R}
+     {p: X -> Type}
+     {F: forall x, (forall y, R y x -> p y) -> p x}
+     (f f': forall x, p x)
+  : (forall x, f x = F x (fun y r => f y)) ->
+    (forall x, f' x = F x (fun y r => f' y)) ->
+    forall x, f x = f' x.
+Proof.
+  intros H1 H2.
+  apply (W R_wf). intros x IH.
+  rewrite H1, H2.
+  f_equal. extensionality y. extensionality r.
+  apply IH,r.
+Qed.
+
+(* A function useed for hiding lia-generated termination proofs *)
+Definition tau {X x} : X := x.
+
+(** Euclidean division with W *)
+
+(* Guarded step function, y pulled out as parameter *)
+Definition Div (y x : nat) (h: forall x', x' < x -> nat) : nat.
+Proof.
+  refine (if le_lt_dec x y then 0 else S (h (x - S y) tau)).
+  lia. 
+Defined.
+
+Definition div x y : nat := W lt_wf (Div y) x.
+Compute div 16 3.
+Fact div_eq x y :
+  div x y = if le_lt_dec x y then 0 else S (div (x - S y) y).
+Proof.
+  exact (W_eq x).
+Qed.
+
+Print Assumptions div_eq.
+
+(** GCDs with W *)
+(* Note: Pairing introduces considerable bureaucratic pain *)
+
+Module GCD.
+Implicit Types (x y: nat) (a b: nat * nat).
+Definition sigma a := fst a + snd a.
+
+Definition GCD a : (forall b, sigma b < sigma a -> nat) -> nat.
+Proof.
+  (* must take h late because of dependency on a *)
+  refine (match a with
+          | (0, y) => fun _ => y
+          | (S x, 0) => fun _ => S x
+          | (S x, S y) => fun h => match (le_lt_dec x y) with
+                               | left H => h (S x, y - x) tau
+                               | right H => h (x - y, S y) tau
+                               end
+          end).
+  all: cbn; lia.
+Defined.
+
+Definition gcd x y : nat := W (retract_wf sigma lt_wf) GCD (x,y).
+
+Compute gcd 49 63.
+     
+Fact gcd_eq3 x y :
+  gcd (S x) (S y) = if le_lt_dec x y
+                    then gcd (S x) (y - x)
+                    else gcd (x - y) (S y).
+Proof.
+  refine (W_eq _).
+Qed.
+ 
+Fact gcd_eq x y :
+  gcd x y = match x, y with
+            | 0, y => y
+            | S x, 0 => S x
+            | S x, S y => if le_lt_dec x y
+                         then gcd (S x) (y - x)
+                         else gcd (x - y) (S y)
+            end.
+Proof.
+  unfold gcd. rewrite W_eq.
+  destruct x. reflexivity.
+  destruct y; reflexivity.
+Qed.
+End GCD.
+
+(** Ackermann with W *)
+
+Definition ACK a : (forall b, lex lt lt b a -> nat) -> nat.
+Proof.
+  (* must take h late because of dependency on a *)
+  (* tuned so that computation works, 
+     "_" in place of tau, auto instead of lia.
+     Fragile, I don't understand it *)
+  refine (match a with
+          | (0, y) => fun _ => S y
+          | (S x, 0) => fun h => h (x, 1) tau
+          | (S x, S y) => fun h => h (x, h (S x, y) tau) _
+          end).
+  Unshelve.
+  all: unfold lex; cbn; auto.
+Defined.
+
+Definition ack x y : nat := W (lex_wf lt_wf lt_wf) ACK (x,y).
+
+Compute ack 3 3. 
+ 
+Fact ack_eq x y :
+  ack x y = match x, y with
+            | 0, y => S y
+            | S x, 0 => ack x 1
+            | S x, S y => ack x (ack (S x) y)
+            end.
+Proof.
+  unfold ack. rewrite W_eq.
+  destruct x. reflexivity.
+  destruct y; reflexivity.
+Qed.
+
+(** Unfolding equation without FE *)
+
+Section Unfolding.
+  Variables
+    (X: Type) (R: X -> X -> Prop)
+    (p: X -> Type)
+    (F: forall x, (forall y, R y x -> p y) -> p x).
+
+  Implicit Types (x y : X) (f: forall x, p x).
+  
+  Definition Ext := 
+    forall x h h', (forall y r, h y r = h' y r) -> F x h = F x h'.
+
+  Variable F_ext: Ext.
+
+  Lemma W'_ext x a a' :
+    W' F x a = W' F x a'.
+  Proof.
+    revert x a a'.
+    enough (forall x (a: Acc R x), forall a a', W' F x a = W' F x a') by eauto.
+    refine (W' (fun x IH => _)).
+    intros [phi] [phi']. cbn.
+    apply F_ext. intros y r.
+    apply IH, r.
+  Qed.
+
+  Definition sat f :=
+    forall x, f x = F x (fun y _ => f y).
+
+  Variable R_wf: wf R.
+ 
+  Fact W_eq' :
+    sat (W R_wf F).
+  Proof.
+    intros x. unfold W. destruct (R_wf x) as [phi]. cbn.
+    apply F_ext. intros y r. apply W'_ext.
+  Qed.
+
+  Fact unique f f' :
+    sat f -> sat f' -> forall x, f x = f' x.
+  Proof.
+    intros H1 H2.
+    apply (W R_wf). intros x IH.
+    rewrite H1, H2. apply F_ext. exact IH.
+  Qed.
+End Unfolding.
+Arguments Ext {X R p} F.
+Arguments W_eq' {X R p F} F_ext R_wf.
+
+Fact Div_ext y :
+  Ext (Div y).
+Proof.
+  intros x h h' H. unfold Div.
+  destruct le_lt_dec as [H1|H1].
+  - reflexivity.
+  - f_equal. apply H.
+Qed.
+
+Fact GCD_ext :
+  Ext GCD.GCD.
+Proof.
+  intros [x y] h h' H.
+  destruct x. reflexivity.
+  destruct y. reflexivity.
+  unfold GCD.GCD.
+  destruct le_lt_dec as [H1|H1]; apply H.
+Qed.
+
+Fact ACK_ext :
+  Ext ACK.
+Proof.
+  intros [x y] h h' H.
+  destruct x. reflexivity.
+  destruct y; cbn.
+  - apply H.
+  - rewrite H. unfold tau. rewrite H. reflexivity.
+Qed.
+  
+(** Transitive closure *)
+
 Section Transitive_closure.
   Variables (X: Type) (R: X -> X -> Prop).
   Inductive TC (x y: X) : Prop :=
   | TC1 : R x y -> TC x y
-  | TC2 y' :TC x y' -> R y' y -> TC x y.
+  | TC2 y' : TC x y' -> R y' y -> TC x y.
   Fact TC_wf :
     wf R -> wf TC.
   Proof.
@@ -134,128 +357,6 @@ Section Successor_relation.
 End Successor_relation.
 
 (** Exercise: Prove that (TC R_S) is < on numbers *)
-
-From Coq Require Import Classical_Prop FunctionalExtensionality.
-
-Fact Acc_pure X (R: X -> X -> Prop) :
-  forall x (a a': Acc R x), a = a'.
-Proof.
-  enough (forall x (a: Acc R x) (a a': Acc R x), a = a') by eauto.
-  refine (W' _). intros x IH [h] [h']. f_equal.
-  extensionality y. extensionality r. apply IH, r.
-Qed.
-
-Print Assumptions Acc_pure.
-
-Fact W_eq
-     {X} {R: X -> X -> Prop} {R_wf: wf R}
-     {p: X -> Type}
-     {F: forall x, (forall y, R y x -> p y) -> p x}
-     (x: X)
-  : W R_wf F x = F x (fun y _ => W R_wf F y).
-Proof.
-  unfold W. destruct (R_wf x) as [h]. cbn.
-  f_equal. extensionality y. extensionality r.
-  f_equal. apply Acc_pure.
-Qed.
-
-(** Euclidean division with W *)
-
-(* Guarded step function, y pulled out as parameter *)
-Definition Div (y x : nat) (h: forall x', x' < x -> nat) : nat.
-Proof.
-  refine (if le_lt_dec x y then 0 else S (h (x - S y) _)).
-  lia. 
-Defined.
-
-Definition div x y : nat := W lt_wf (Div y) x.
-Compute div 16 3.
-Fact div_eq x y :
-  div x y = if le_lt_dec x y then 0 else S (div (x - S y) y).
-Proof.
-  exact (W_eq x).
-Qed.
-
-Print Assumptions div_eq.
-
-(** GCDs with W *)
-(* Note: Pairing introduces considerable bureaucratic pain *)
-
-Implicit Types (x y: nat) (a b: nat * nat).
-Definition sigma a := fst a + snd a.
-
-Definition GCD a : (forall b, sigma b < sigma a -> nat) -> nat.
-Proof.
-  (* must take h late because of dependency on a *)
-  refine (match a with
-          | (0, y) => fun _ => y
-          | (S x, 0) => fun _ => S x
-          | (S x, S y) => fun h => match (le_lt_dec x y) with
-                               | left H => h (S x, y - x) _
-                               | right H => h (x - y, S y) _
-                               end
-          end).
-  all: cbn; lia.
-Defined.
-
-Definition gcd x y : nat := W (retract_wf sigma lt_wf) GCD (x,y).
-
-Compute gcd 49 63.
-     
-Fact gcd_eq3 x y :
-  gcd (S x) (S y) = if le_lt_dec x y
-                    then gcd (S x) (y - x)
-                    else gcd (x - y) (S y).
-Proof.
-  refine (W_eq _).
-Qed.
- 
-Fact gcd_eq x y :
-  gcd x y = match x, y with
-            | 0, y => y
-            | S x, 0 => S x
-            | S x, S y => if le_lt_dec x y
-                         then gcd (S x) (y - x)
-                         else gcd (x - y) (S y)
-            end.
-Proof.
-  unfold gcd. rewrite W_eq.
-  destruct x. reflexivity.
-  destruct y; reflexivity.
-Qed.
-
-(** Ackermann with W *)
-
-Definition ACK a : (forall b, lex lt lt b a -> nat) -> nat.
-Proof.
-  (* must take h late because of dependency on a *)
-  refine (match a with
-          | (0, y) => fun _ => S y
-          | (S x, 0) => fun h => h (x, 1) _
-          | (S x, S y) => fun h => h (x, h (S x, y) _) _
-          end).
-  Unshelve.
-  all:unfold lex; cbn; auto.
-  (* Using lia here will block computation *)
-Defined.
-
-Definition ack x y : nat := W (lex_wf lt_wf lt_wf) ACK (x,y).
-
-Compute ack 3 3. 
- 
-Fact ack_eq x y :
-  ack x y = match x, y with
-            | 0, y => S y
-            | S x, 0 => ack x 1
-            | S x, S y => ack x (ack (S x) y)
-            end.
-Proof.
-  unfold ack. rewrite W_eq.
-  destruct x. reflexivity.
-  destruct y; reflexivity.
-Qed.
-
-
 
 
 
