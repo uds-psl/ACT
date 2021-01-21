@@ -85,7 +85,7 @@ Section Retract.
 End Retract.
 Arguments retract_wf {X Y R}.
 
-From Coq Require Import Classical_Prop FunctionalExtensionality.
+From Coq Require Import FunctionalExtensionality.
 
 Fact Acc_pure X (R: X -> X -> Prop) :
   forall x (a a': Acc R x), a = a'.
@@ -305,7 +305,87 @@ Proof.
   - apply H.
   - rewrite H. unfold tau. rewrite H. reflexivity.
 Qed.
+
+(** Classical Characterization *)
+
+From Coq Require Import Classical_Prop.
+
+Section Classical.
+  Variables (X: Type) (R: X -> X -> Prop).
+  Implicit Types (x y: X) (p: X -> Prop).
   
+  Fact char_wf_ind :
+    wf R <-> forall p: X -> Prop, (forall x, (forall y, R y x -> p y) -> p x) -> forall x, p x.
+  Proof.
+    split; intros H.
+    - intros p. apply W. exact H.
+    - refine (H (Acc R) _). apply AccC.
+  Qed.
+
+  Definition pro_pred p := forall x, p x -> exists y, p y /\ R y x.
+  Definition pro x := exists p, p x /\ pro_pred p.
+
+  Fact pro_disjoint x :
+    Acc R x -> pro x -> False.
+  Proof.
+    revert x. refine (W' _). intros x IH.
+    intros (p&H1&H2). apply H2 in H1 as (y&H1&H3).
+    eapply IH. exact H3. exists p. easy.
+  Qed.
+  
+  Fact pro_exhaustive_xm x :
+    Acc R x \/ pro x.
+  Proof.
+    classical_right.
+    exists (fun x => ~Acc R x). split. exact H.
+    clear. intros x H.
+    apply NNPP. contradict H. constructor. intros y H1.
+    apply NNPP. contradict H. exists y; easy.
+  Qed.
+  
+  Fact char_wf_pro_xm :
+    wf R <-> ~ex pro.
+  Proof.
+    split.
+    - intros H (x&H1). specialize (H x).
+      eapply pro_disjoint; eassumption.
+    - intros H x.
+      destruct (pro_exhaustive_xm x) as [H1|H1]. exact H1.
+      contradict H. exists x. exact H1.
+  Qed.
+
+  Definition min p x := p x /\ forall y, p y -> ~R y x.
+ 
+  Fact pro_min_xm p :
+    pro_pred p <-> ~ ex (min p).
+  Proof.
+    split; intros H.
+    - intros (x&H2&H3).
+      apply H in H2 as (y&H2&H4). eapply H3; eassumption.
+    - intros x H2. apply NNPP. contradict H.
+      exists x. split. exact H2.
+      intros y H4 H5. apply H. exists y; easy.
+  Qed.
+
+  Fact pro_min_pred_xm :
+    ~ex pro <-> forall p, ex p -> ex (min p).
+  Proof.
+    split; intros H.
+    - intros p [x H1].
+      apply NNPP. intros H2%pro_min_xm.
+      apply H. exists x,p; easy.
+    - intros (y&p&H1&H2%pro_min_xm).
+      apply H2, H. exists y. exact H1.
+  Qed.
+  
+  Fact char_wf_min_xm :
+    wf R <-> forall p, ex p -> ex (min p).
+  Proof.
+    rewrite char_wf_pro_xm. apply pro_min_pred_xm.
+  Qed.
+End Classical.
+Print Assumptions char_wf_min_xm.
+
 (** Transitive closure *)
 
 Section Transitive_closure.
@@ -357,7 +437,3 @@ Section Successor_relation.
 End Successor_relation.
 
 (** Exercise: Prove that (TC R_S) is < on numbers *)
-
-
-
-
