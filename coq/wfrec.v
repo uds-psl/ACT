@@ -436,4 +436,52 @@ Section Successor_relation.
   Qed.
 End Successor_relation.
 
+(** Existential Witness Operator *)
+
+Module EWO.
+Section EWO.
+  Variable p: nat -> Prop.
+  Variable p_dec: forall n, p n + ~p n.
+  Implicit Types x y: nat.
+
+  Let R x y := (x = S y) /\ ~p y.
+
+  Fact R_Acc x y :
+    p (x + y) -> Acc R y.
+  Proof.
+    induction x as [|x IH] in y |-*;
+      intros H; constructor; intros ? [-> H1].
+    - exfalso. easy.
+    - apply IH. rewrite <-plus_n_Sm. easy.
+  Qed.
+
+  Fact R_Acc_Sigma :
+    forall x, Acc R x -> sigT p.
+    refine (W' _). intros x IH.
+    destruct (p_dec x) as [H1|H1].
+    - exists x. exact H1.
+    - apply (IH (S x)). easy.
+  Qed.
+
+  Fact EWO :
+    ex p -> sigT p.
+  Proof.
+    intros H.
+    apply (R_Acc_Sigma 0).
+    destruct H as [x H].
+    apply (R_Acc x 0).
+    rewrite plus_0_r. exact H.
+  Qed.
+End EWO.
+End EWO.
+  
 (** Exercise: Prove that (TC R_S) is < on numbers *)
+
+Fact exercise_loop (X: Type) (R: X -> X -> Prop) :
+  forall x y, R x y -> R y x -> ~Acc R x.
+Proof.
+  intros x y H1 H2 H3. revert x H3 y H1 H2.
+  refine (W' _). intros x IH y H1 H2.
+  eapply IH; eassumption.
+Qed.
+
